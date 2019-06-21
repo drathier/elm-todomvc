@@ -25,7 +25,7 @@ type FrontendMsg
 
 type ToBackend
     = ClientJoined
-    | SetStorage Model
+    | SetStorage (List Entry)
 
 
 type BackendMsg
@@ -33,7 +33,7 @@ type BackendMsg
 
 
 type ToFrontend
-    = NewState Model
+    = NewState (List Entry)
 
 
 

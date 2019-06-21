@@ -41,7 +41,7 @@ app =
 
 setStorage : Model -> Cmd FrontendMsg
 setStorage model =
-    Msg.sendToBackend 5000 SendToBackendFeedback (SetStorage model)
+    Msg.sendToBackend 5000 SendToBackendFeedback (SetStorage model.entries)
 
 
 {-| We want to `setStorage` on every update. This function adds the setStorage
@@ -59,11 +59,11 @@ updateWithStorage msg model =
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
-updateFromBackend msg _ =
+updateFromBackend msg model =
     case msg of
-        NewState newModel ->
+        NewState entries ->
             -- TODO: merge the two models somehow; this should probably be an add-remove crdt set
-            ( newModel, Cmd.none )
+            ( { model | entries = entries }, Cmd.none )
 
 
 init : Url.Url -> Browser.Navigation.Key -> ( Model, Cmd FrontendMsg )

@@ -7,14 +7,14 @@ import Set exposing (Set)
 
 
 type alias Model =
-    { model : Msg.Model
+    { entries : List Entry
     , clients : Set ClientId
     }
 
 
 init : ( Model, Cmd BackendMsg )
 init =
-    ( { clients = Set.empty, model = Msg.emptyModel }, Cmd.none )
+    ( { clients = Set.empty, entries = [] }, Cmd.none )
 
 
 update : BackendMsg -> Model -> ( Model, Cmd BackendMsg )
@@ -32,18 +32,20 @@ updateFromFrontend clientId msg model =
     case msg of
         ClientJoined ->
             ( { model | clients = Set.insert clientId model.clients }
-            , Msg.sendToFrontend 5000 clientId (SendToFrontendFeedback clientId) (NewState model.model)
+            , Msg.sendToFrontend 5000 clientId (SendToFrontendFeedback clientId) (NewState model.entries)
             )
 
-        SetStorage newModel ->
-            ( { model | model = newModel }
-            , broadcastNewOps model.clients newModel
+        SetStorage newEntries ->
+            ( { model | entries = newEntries }
+            , broadcastNewOps clientId model.clients newEntries
             )
 
 
-broadcastNewOps clients newOps =
+broadcastNewOps origin clients newOps =
     clients
         |> Set.toList
+        -- don't send changes back to origin; we don't have a crdt so this will only cause laggy behaviour
+        |> List.filter ((/=) origin)
         |> List.map (\cid -> Msg.sendToFrontend 5000 cid (SendToFrontendFeedback cid) (NewState newOps))
         |> Cmd.batch
 
