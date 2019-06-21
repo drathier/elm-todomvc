@@ -39,6 +39,10 @@ app =
         }
 
 
+type alias Id =
+    Int
+
+
 setStorage : Model -> Cmd FrontendMsg
 setStorage model =
     Msg.sendToBackend 5000 SendToBackendFeedback (SetStorage model.entries)
@@ -54,7 +58,12 @@ updateWithStorage msg model =
             update msg model
     in
     ( newModel
-    , Cmd.batch [ setStorage newModel, cmds ]
+    , if model.entries == newModel.entries then
+        -- nothing important changed, no need to tell the backend :)
+        Cmd.none
+
+      else
+        Cmd.batch [ setStorage newModel, cmds ]
     )
 
 
@@ -86,14 +95,13 @@ update msg model =
 
         Add ->
             ( { model
-                | uid = model.uid + 1
-                , field = ""
+                | field = ""
                 , entries =
                     if String.isEmpty model.field then
                         model.entries
 
                     else
-                        model.entries ++ [ newEntry model.field model.uid ]
+                        model.entries ++ [ newEntry model.field ]
               }
             , Cmd.none
             )
@@ -105,8 +113,8 @@ update msg model =
 
         EditingEntry id isEditing ->
             let
-                updateEntry t =
-                    if t.id == id then
+                updateEntry entryId t =
+                    if entryId == id then
                         { t | editing = isEditing }
 
                     else
@@ -115,25 +123,37 @@ update msg model =
                 focus =
                     Dom.focus ("todo-" ++ String.fromInt id)
             in
-            ( { model | entries = List.map updateEntry model.entries }
+            ( { model | entries = List.indexedMap updateEntry model.entries }
             , Task.attempt (\_ -> NoOp) focus
             )
 
         UpdateEntry id task ->
             let
-                updateEntry t =
-                    if t.id == id then
+                updateEntry entryId t =
+                    if entryId == id then
                         { t | description = task }
 
                     else
                         t
             in
-            ( { model | entries = List.map updateEntry model.entries }
+            ( { model | entries = List.indexedMap updateEntry model.entries }
             , Cmd.none
             )
 
         Delete id ->
-            ( { model | entries = List.filter (\t -> t.id /= id) model.entries }
+            ( { model
+                | entries =
+                    model.entries
+                        |> List.indexedMap
+                            (\idx v ->
+                                if idx == id then
+                                    []
+
+                                else
+                                    [ v ]
+                            )
+                        |> List.concat
+              }
             , Cmd.none
             )
 
@@ -144,14 +164,14 @@ update msg model =
 
         Check id isCompleted ->
             let
-                updateEntry t =
-                    if t.id == id then
+                updateEntry entryId t =
+                    if entryId == id then
                         { t | completed = isCompleted }
 
                     else
                         t
             in
-            ( { model | entries = List.map updateEntry model.entries }
+            ( { model | entries = List.indexedMap updateEntry model.entries }
             , Cmd.none
             )
 
@@ -273,7 +293,7 @@ viewEntries visibility entries =
             [ for "toggle-all" ]
             [ text "Mark all as complete" ]
         , Keyed.ul [ class "todo-list" ] <|
-            List.map viewKeyedEntry (List.filter isVisible entries)
+            List.indexedMap viewKeyedEntry (List.filter isVisible entries)
         ]
 
 
@@ -281,13 +301,13 @@ viewEntries visibility entries =
 -- VIEW INDIVIDUAL ENTRIES
 
 
-viewKeyedEntry : Entry -> ( String, Html FrontendMsg )
-viewKeyedEntry todo =
-    ( String.fromInt todo.id, lazy viewEntry todo )
+viewKeyedEntry : Id -> Entry -> ( String, Html FrontendMsg )
+viewKeyedEntry id todo =
+    ( String.fromInt id, lazy (viewEntry id) todo )
 
 
-viewEntry : Entry -> Html FrontendMsg
-viewEntry todo =
+viewEntry : Id -> Entry -> Html FrontendMsg
+viewEntry entryId todo =
     li
         [ classList [ ( "completed", todo.completed ), ( "editing", todo.editing ) ] ]
         [ div
@@ -296,15 +316,15 @@ viewEntry todo =
                 [ class "toggle"
                 , type_ "checkbox"
                 , checked todo.completed
-                , onClick (Check todo.id (not todo.completed))
+                , onClick (Check entryId (not todo.completed))
                 ]
                 []
             , label
-                [ onDoubleClick (EditingEntry todo.id True) ]
+                [ onDoubleClick (EditingEntry entryId True) ]
                 [ text todo.description ]
             , button
                 [ class "destroy"
-                , onClick (Delete todo.id)
+                , onClick (Delete entryId)
                 ]
                 []
             ]
@@ -312,10 +332,10 @@ viewEntry todo =
             [ class "edit"
             , value todo.description
             , name "title"
-            , id ("todo-" ++ String.fromInt todo.id)
-            , onInput (UpdateEntry todo.id)
-            , onBlur (EditingEntry todo.id False)
-            , onEnter (EditingEntry todo.id False)
+            , id ("todo-" ++ String.fromInt entryId)
+            , onInput (UpdateEntry entryId)
+            , onBlur (EditingEntry entryId False)
+            , onEnter (EditingEntry entryId False)
             ]
             []
         ]
@@ -344,7 +364,7 @@ viewControls visibility entries =
         ]
 
 
-viewControlsCount : Int -> Html FrontendMsg
+viewControlsCount : Id -> Html FrontendMsg
 viewControlsCount entriesLeft =
     let
         item_ =
@@ -382,7 +402,7 @@ visibilitySwap uri visibility actualVisibility =
         ]
 
 
-viewControlsClear : Int -> Html FrontendMsg
+viewControlsClear : Id -> Html FrontendMsg
 viewControlsClear entriesCompleted =
     button
         [ class "clear-completed"
