@@ -1,125 +1,84 @@
-port module Main exposing (..)
+module Frontend exposing (app)
 
 {-| TodoMVC implemented in Elm, using plain HTML and CSS for rendering.
 
 This application is broken up into three key parts:
 
-  1. Model  - a full definition of the application's state
-  2. Update - a way to step the application state forward
-  3. View   - a way to visualize our application state with HTML
+1.  Model - a full definition of the application's state
+2.  Update - a way to step the application state forward
+3.  View - a way to visualize our application state with HTML
 
 This clean division of concerns is a core part of Elm. You can read more about
 this in <http://guide.elm-lang.org/architecture/index.html>
+
 -}
 
-import Browser
 import Browser.Dom as Dom
+import Browser.Navigation
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (lazy, lazy2)
 import Json.Decode as Json
+import Lamdera.Frontend as Frontend
+import Msg exposing (Entry, FrontendMsg(..), Model, ToBackend(..), ToFrontend(..), emptyModel, newEntry)
 import Task
+import Url
 
 
-main : Program (Maybe Model) Model Msg
-main =
-    Browser.document
+app =
+    Frontend.application
         { init = init
-        , view = \model -> { title = "Elm • TodoMVC", body = [view model] }
+        , onUrlRequest = \_ -> NoOp
+        , onUrlChange = \_ -> NoOp
         , update = updateWithStorage
+        , updateFromBackend = updateFromBackend
         , subscriptions = \_ -> Sub.none
+        , view = \model -> { title = "Lamdera • Elm • TodoMVC", body = [ view model ] }
         }
 
 
-port setStorage : Model -> Cmd msg
+setStorage : Model -> Cmd FrontendMsg
+setStorage model =
+    Msg.sendToBackend 5000 SendToBackendFeedback (SetStorage model)
 
 
 {-| We want to `setStorage` on every update. This function adds the setStorage
 command for every step of the update function.
 -}
-updateWithStorage : Msg -> Model -> ( Model, Cmd Msg )
+updateWithStorage : FrontendMsg -> Model -> ( Model, Cmd FrontendMsg )
 updateWithStorage msg model =
     let
         ( newModel, cmds ) =
             update msg model
     in
-        ( newModel
-        , Cmd.batch [ setStorage newModel, cmds ]
-        )
+    ( newModel
+    , Cmd.batch [ setStorage newModel, cmds ]
+    )
 
 
-
--- MODEL
-
-
--- The full application state of our todo app.
-type alias Model =
-    { entries : List Entry
-    , field : String
-    , uid : Int
-    , visibility : String
-    }
+updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
+updateFromBackend msg _ =
+    case msg of
+        NewState newModel ->
+            -- TODO: merge the two models somehow; this should probably be an add-remove crdt set
+            ( newModel, Cmd.none )
 
 
-type alias Entry =
-    { description : String
-    , completed : Bool
-    , editing : Bool
-    , id : Int
-    }
-
-
-emptyModel : Model
-emptyModel =
-    { entries = []
-    , visibility = "All"
-    , field = ""
-    , uid = 0
-    }
-
-
-newEntry : String -> Int -> Entry
-newEntry desc id =
-    { description = desc
-    , completed = False
-    , editing = False
-    , id = id
-    }
-
-
-init : Maybe Model -> ( Model, Cmd Msg )
-init maybeModel =
-  ( Maybe.withDefault emptyModel maybeModel
-  , Cmd.none
-  )
+init : Url.Url -> Browser.Navigation.Key -> ( Model, Cmd FrontendMsg )
+init url key =
+    ( emptyModel
+    , Msg.sendToBackend 5000 SendToBackendFeedback ClientJoined
+    )
 
 
 
 -- UPDATE
-
-
-{-| Users of our app can trigger messages by clicking and typing. These
-messages are fed into the `update` function as they occur, letting us react
-to them.
--}
-type Msg
-    = NoOp
-    | UpdateField String
-    | EditingEntry Int Bool
-    | UpdateEntry Int String
-    | Add
-    | Delete Int
-    | DeleteComplete
-    | Check Int Bool
-    | CheckAll Bool
-    | ChangeVisibility String
-
-
-
 -- How we update our Model on a given Msg?
-update : Msg -> Model -> ( Model, Cmd Msg )
+
+
+update : FrontendMsg -> Model -> ( Model, Cmd FrontendMsg )
 update msg model =
     case msg of
         NoOp ->
@@ -132,6 +91,7 @@ update msg model =
                 , entries =
                     if String.isEmpty model.field then
                         model.entries
+
                     else
                         model.entries ++ [ newEntry model.field model.uid ]
               }
@@ -148,6 +108,7 @@ update msg model =
                 updateEntry t =
                     if t.id == id then
                         { t | editing = isEditing }
+
                     else
                         t
 
@@ -163,6 +124,7 @@ update msg model =
                 updateEntry t =
                     if t.id == id then
                         { t | description = task }
+
                     else
                         t
             in
@@ -185,6 +147,7 @@ update msg model =
                 updateEntry t =
                     if t.id == id then
                         { t | completed = isCompleted }
+
                     else
                         t
             in
@@ -206,28 +169,36 @@ update msg model =
             , Cmd.none
             )
 
+        SendToBackendFeedback _ ->
+            -- assume it went ok :)
+            -- TODO: don't assume it went ok
+            ( model, Cmd.none )
+
 
 
 -- VIEW
 
 
-view : Model -> Html Msg
+view : Model -> Html FrontendMsg
 view model =
-    div
-        [ class "todomvc-wrapper"
-        , style "visibility" "hidden"
-        ]
-        [ section
-            [ class "todoapp" ]
-            [ lazy viewInput model.field
-            , lazy2 viewEntries model.visibility model.entries
-            , lazy2 viewControls model.visibility model.entries
+    div []
+        [ node "link" [ rel "stylesheet", href "/style.css" ] []
+        , div
+            [ class "todomvc-wrapper"
+            , style "visibility" "hidden"
             ]
-        , infoFooter
+            [ section
+                [ class "todoapp" ]
+                [ lazy viewInput model.field
+                , lazy2 viewEntries model.visibility model.entries
+                , lazy2 viewControls model.visibility model.entries
+                ]
+            , infoFooter
+            ]
         ]
 
 
-viewInput : String -> Html Msg
+viewInput : String -> Html FrontendMsg
 viewInput task =
     header
         [ class "header" ]
@@ -245,23 +216,24 @@ viewInput task =
         ]
 
 
-onEnter : Msg -> Attribute Msg
+onEnter : FrontendMsg -> Attribute FrontendMsg
 onEnter msg =
     let
         isEnter code =
             if code == 13 then
                 Json.succeed msg
+
             else
                 Json.fail "not ENTER"
     in
-        on "keydown" (Json.andThen isEnter keyCode)
+    on "keydown" (Json.andThen isEnter keyCode)
 
 
 
 -- VIEW ALL ENTRIES
 
 
-viewEntries : String -> List Entry -> Html Msg
+viewEntries : String -> List Entry -> Html FrontendMsg
 viewEntries visibility entries =
     let
         isVisible todo =
@@ -281,39 +253,40 @@ viewEntries visibility entries =
         cssVisibility =
             if List.isEmpty entries then
                 "hidden"
+
             else
                 "visible"
     in
-        section
-            [ class "main"
-            , style "visibility" cssVisibility
+    section
+        [ class "main"
+        , style "visibility" cssVisibility
+        ]
+        [ input
+            [ class "toggle-all"
+            , type_ "checkbox"
+            , name "toggle"
+            , checked allCompleted
+            , onClick (CheckAll (not allCompleted))
             ]
-            [ input
-                [ class "toggle-all"
-                , type_ "checkbox"
-                , name "toggle"
-                , checked allCompleted
-                , onClick (CheckAll (not allCompleted))
-                ]
-                []
-            , label
-                [ for "toggle-all" ]
-                [ text "Mark all as complete" ]
-            , Keyed.ul [ class "todo-list" ] <|
-                List.map viewKeyedEntry (List.filter isVisible entries)
-            ]
+            []
+        , label
+            [ for "toggle-all" ]
+            [ text "Mark all as complete" ]
+        , Keyed.ul [ class "todo-list" ] <|
+            List.map viewKeyedEntry (List.filter isVisible entries)
+        ]
 
 
 
 -- VIEW INDIVIDUAL ENTRIES
 
 
-viewKeyedEntry : Entry -> ( String, Html Msg )
+viewKeyedEntry : Entry -> ( String, Html FrontendMsg )
 viewKeyedEntry todo =
     ( String.fromInt todo.id, lazy viewEntry todo )
 
 
-viewEntry : Entry -> Html Msg
+viewEntry : Entry -> Html FrontendMsg
 viewEntry todo =
     li
         [ classList [ ( "completed", todo.completed ), ( "editing", todo.editing ) ] ]
@@ -352,7 +325,7 @@ viewEntry todo =
 -- VIEW CONTROLS AND FOOTER
 
 
-viewControls : String -> List Entry -> Html Msg
+viewControls : String -> List Entry -> Html FrontendMsg
 viewControls visibility entries =
     let
         entriesCompleted =
@@ -361,33 +334,34 @@ viewControls visibility entries =
         entriesLeft =
             List.length entries - entriesCompleted
     in
-        footer
-            [ class "footer"
-            , hidden (List.isEmpty entries)
-            ]
-            [ lazy viewControlsCount entriesLeft
-            , lazy viewControlsFilters visibility
-            , lazy viewControlsClear entriesCompleted
-            ]
+    footer
+        [ class "footer"
+        , hidden (List.isEmpty entries)
+        ]
+        [ lazy viewControlsCount entriesLeft
+        , lazy viewControlsFilters visibility
+        , lazy viewControlsClear entriesCompleted
+        ]
 
 
-viewControlsCount : Int -> Html Msg
+viewControlsCount : Int -> Html FrontendMsg
 viewControlsCount entriesLeft =
     let
         item_ =
             if entriesLeft == 1 then
                 " item"
+
             else
                 " items"
     in
-        span
-            [ class "todo-count" ]
-            [ strong [] [ text (String.fromInt entriesLeft) ]
-            , text (item_ ++ " left")
-            ]
+    span
+        [ class "todo-count" ]
+        [ strong [] [ text (String.fromInt entriesLeft) ]
+        , text (item_ ++ " left")
+        ]
 
 
-viewControlsFilters : String -> Html Msg
+viewControlsFilters : String -> Html FrontendMsg
 viewControlsFilters visibility =
     ul
         [ class "filters" ]
@@ -399,7 +373,7 @@ viewControlsFilters visibility =
         ]
 
 
-visibilitySwap : String -> String -> String -> Html Msg
+visibilitySwap : String -> String -> String -> Html FrontendMsg
 visibilitySwap uri visibility actualVisibility =
     li
         [ onClick (ChangeVisibility visibility) ]
@@ -408,7 +382,7 @@ visibilitySwap uri visibility actualVisibility =
         ]
 
 
-viewControlsClear : Int -> Html Msg
+viewControlsClear : Int -> Html FrontendMsg
 viewControlsClear entriesCompleted =
     button
         [ class "clear-completed"
@@ -430,5 +404,9 @@ infoFooter =
         , p []
             [ text "Part of "
             , a [ href "http://todomvc.com" ] [ text "TodoMVC" ]
+            ]
+        , p []
+            [ text "Modified to run on "
+            , a [ href "http://lamdera.com" ] [ text "Lamdera" ]
             ]
         ]
