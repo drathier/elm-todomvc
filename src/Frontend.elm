@@ -21,14 +21,14 @@ import Html.Events exposing (..)
 import Html.Keyed as Keyed
 import Html.Lazy exposing (lazy, lazy2)
 import Json.Decode as Json
-import Lamdera.Frontend as Frontend
+import Lamdera.Frontend
 import Msg exposing (Entry, FrontendMsg(..), Model, ToBackend(..), ToFrontend(..), emptyModel, newEntry)
 import Task
 import Url
 
 
 app =
-    Frontend.application
+    Lamdera.Frontend.application
         { init = init
         , onUrlRequest = \_ -> NoOp
         , onUrlChange = \_ -> NoOp
@@ -45,7 +45,7 @@ type alias Id =
 
 setStorage : Model -> Cmd FrontendMsg
 setStorage model =
-    Msg.sendToBackend 5000 SendToBackendFeedback (SetStorage model.entries)
+    Lamdera.Frontend.sendToBackend 5000 SendToBackendFeedback (SetStorage model.entries)
 
 
 {-| We want to `setStorage` on every update. This function adds the setStorage
@@ -78,7 +78,7 @@ updateFromBackend msg model =
 init : Url.Url -> Browser.Navigation.Key -> ( Model, Cmd FrontendMsg )
 init url key =
     ( emptyModel
-    , Msg.sendToBackend 5000 SendToBackendFeedback ClientJoined
+    , Lamdera.Frontend.sendToBackend 5000 SendToBackendFeedback ClientJoined
     )
 
 

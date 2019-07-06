@@ -1,7 +1,5 @@
-module Msg exposing (BackendMsg(..), Entry, FrontendMsg(..), Model, ToBackend(..), ToFrontend(..), emptyModel, newEntry, sendToBackend, sendToFrontend)
+module Msg exposing (BackendMsg(..), Entry, FrontendMsg(..), Model, ToBackend(..), ToFrontend(..), emptyModel, newEntry)
 
-import Lamdera.Backend
-import Lamdera.Frontend
 import Lamdera.Types exposing (..)
 
 
@@ -69,26 +67,3 @@ newEntry desc =
     , completed = False
     , editing = False
     }
-
-
-
--- sendToX helpers
-
-
-sendToBackend :
-    Milliseconds
-    -> (Result WsError () -> FrontendMsg)
-    -> ToBackend
-    -> Cmd FrontendMsg
-sendToBackend =
-    Lamdera.Frontend.sendToBackend
-
-
-sendToFrontend :
-    Milliseconds
-    -> ClientId
-    -> (Result WsError () -> BackendMsg)
-    -> ToFrontend
-    -> Cmd BackendMsg
-sendToFrontend =
-    Lamdera.Backend.sendToFrontend
