@@ -32,7 +32,7 @@ updateFromFrontend clientId msg model =
     case msg of
         ClientJoined ->
             ( { model | clients = Set.insert clientId model.clients }
-            , Msg.sendToFrontend 5000 clientId (SendToFrontendFeedback clientId) (NewState model.entries)
+            , Lamdera.Backend.sendToFrontend 5000 clientId (SendToFrontendFeedback clientId) (NewState model.entries)
             )
 
         SetStorage newEntries ->
@@ -46,7 +46,7 @@ broadcastNewOps origin clients newOps =
         |> Set.toList
         -- don't send changes back to origin; we don't have a crdt so this will only cause laggy behaviour
         |> List.filter ((/=) origin)
-        |> List.map (\cid -> Msg.sendToFrontend 5000 cid (SendToFrontendFeedback cid) (NewState newOps))
+        |> List.map (\cid -> Lamdera.Backend.sendToFrontend 5000 cid (SendToFrontendFeedback cid) (NewState newOps))
         |> Cmd.batch
 
 
